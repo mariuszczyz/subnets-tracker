@@ -92,9 +92,51 @@ def _build_vpc_data(vpc_id: str, subnets: list[dict[str, Any]], vpc_cidrs: list[
 
 
 def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
-    """Render the full HTML page."""
+    """Render the full HTML page with static HTML and minimal JS."""
     vpc_id = vpc_id or (vpcs[0]["id"] if vpcs else "")
-    vpcs_json = json.dumps(vpcs)
+    active_id = vpc_id
+
+    # --- VPC selector buttons ---
+    vpc_buttons = "".join(
+        f'<button class="vpc-btn{" active" if v["id"] == active_id else ""}"'
+        f' onclick="selectVpc(this, \'{v["id"]}\')">{v["id"]}</button>'
+        for v in vpcs
+    )
+
+    # --- Subnet bars ---
+    subnet_bars = "".join(
+        f'<div class="subnet-bar {s["type"].lower()}"'
+        f' style="left:{s["x"]}%;width:{s["width"]}%"'
+        f' onclick="toggleExpand(this)">{s["name"]}</div>'
+        for v in vpcs
+        for s in v["subnets"]
+        if v["id"] == active_id
+    )
+
+    # --- CIDR labels ---
+    vpc_data = next((v for v in vpcs if v["id"] == active_id), vpcs[0])
+    cidr_labels = (
+        f'<span>{_ip(vpc_data["vpc_start"])} - {_ip(vpc_data["vpc_end"])}</span>'
+    )
+
+    # --- Detail cards ---
+    def _tag_html(tags):
+        return "".join(
+            f'<span class="tag">{t["key"]}: {t["value"]}</span>' for t in tags
+        )
+
+    def _detail_card(s):
+        tags_html = _tag_html(s["tags"]) if s["tags"] else ""
+        return (
+            '<div class="subnet-detail">'
+            f'<h4>{s["name"]} ({s["cidr"]})</h4>'
+            f'<p>AZ: {s["az"]} | Type: {s["type"]}'
+            f' | IPs: {s["total_ips"]} total / {s["available"]} available</p>'
+            f'{tags_html}</p>'
+            '</div>'
+        )
+
+    details = "".join(_detail_card(s) for s in vpc_data["subnets"])
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -240,8 +282,11 @@ def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
     opacity: 0;
     transition: opacity 0.15s;
     min-width: 200px;
+    bottom: -4rem;
+    left: 50%;
+    transform: translateX(-50%);
   }}
-  .tooltip.visible {{ opacity: 1; }}
+  .map:hover ~ .tooltip {{ opacity: 1; }}
   .tooltip h3 {{ margin-bottom: 0.5rem; font-size: 1rem; }}
   .tooltip p {{ color: var(--text-dim); margin: 0.25rem 0; }}
   .tooltip .tag {{
@@ -308,8 +353,8 @@ def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
 </head>
 <body>
 <div class="header">
-  <h1>VPC <span id="vpc-name">Visualizer</span></h1>
-  <div class="vpc-selector" id="vpc-selector"></div>
+  <h1>VPC <span id="vpc-name">{vpc_id}</span></h1>
+  <div class="vpc-selector" id="vpc-selector">{vpc_buttons}</div>
   <div class="zoom-controls">
     <button class="zoom-btn" onclick="zoomOut()">-</button>
     <span class="zoom-level" id="zoom-level">100%</span>
@@ -318,8 +363,8 @@ def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
   </div>
 </div>
 <div class="map" id="map">
-  <div class="vpc-bar" id="vpc-bar"></div>
-  <div class="cidr-labels" id="cidr-labels"></div>
+  <div class="vpc-bar" id="vpc-bar">{subnet_bars}</div>
+  <div class="cidr-labels" id="cidr-labels">{cidr_labels}</div>
 </div>
 <div class="legend">
   <div class="legend-item">
@@ -333,132 +378,65 @@ def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
 </div>
 <div class="details-panel">
   <h2>Subnet Details</h2>
-  <div id="subnet-details"></div>
+  {details}
 </div>
-<div class="tooltip" id="tooltip"></div>
+<div class="tooltip" id="tooltip">
+  <h3>{vpc_data["subnets"][0]["name"] if vpc_data["subnets"] else "N/A"}</h3>
+  <p><strong>CIDR:</strong> {vpc_data["subnets"][0]["cidr"] if vpc_data["subnets"] else "N/A"}</p>
+  <p><strong>Type:</strong> {vpc_data["subnets"][0]["type"] if vpc_data["subnets"] else "N/A"}</p>
+  <p><strong>AZ:</strong> {vpc_data["subnets"][0]["az"] if vpc_data["subnets"] else "N/A"}</p>
+  <p><strong>IPs:</strong> {vpc_data["subnets"][0]["total_ips"] if vpc_data["subnets"] else 0} total / {vpc_data["subnets"][0]["available"] if vpc_data["subnets"] else 0} available</p>
+</div>
 
 <script>
-const data = {vpcs_json};
-const vpcId = "{vpc_id}";
-let currentVpc = null;
-let zoom = 1;
-let expandedSubnet = null;
+var currentVpcId = "{vpc_id}";
+var zoom = 1;
+var expandedEl = null;
 
-function findVpc(id) {{
-  return data.find(v => v.id === id) || data[0];
-}}
-
-function renderVpcSelector() {{
-  const el = document.getElementById('vpc-selector');
-  el.innerHTML = data.map(v =>
-    `<button class="vpc-btn ${{v.id === vpcId ? 'active' : ''}}" onclick="selectVpc('${{v.id}}')">$${{v.id}}</button>`
-  ).join('');
-}}
-
-function selectVpc(id) {{
+function selectVpc(btn, id) {{
   document.querySelectorAll('.vpc-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
-  const vpc = findVpc(id);
-  document.getElementById('vpc-name').textContent = vpc.id;
-  renderMap(vpc);
-  renderDetails(vpc);
+  btn.classList.add('active');
+  currentVpcId = id;
+  document.getElementById('vpc-name').textContent = id;
 }}
 
-function renderMap(vpc) {{
-  currentVpc = vpc;
-  const bar = document.getElementById('vpc-bar');
-  bar.innerHTML = '';
-  bar.style.transform = `scaleX(${{zoom}})`;
-  bar.style.transformOrigin = 'left center';
-
-  vpc.subnets.forEach(s => {{
-    const el = document.createElement('div');
-    el.className = `subnet-bar ${{s.type === 'Public' ? 'public' : 'private'}}`;
-    if (expandedSubnet === s.id) el.classList.add('expanded');
-    el.style.left = `${{s.x}}%`;
-    el.style.width = `${{s.width}}%`;
-    el.textContent = s.name;
-    el.dataset.id = s.id;
-    el.addEventListener('click', () => toggleExpand(s.id));
-    el.addEventListener('mouseenter', (e) => showTooltip(e, s));
-    el.addEventListener('mouseleave', hideTooltip);
-    bar.appendChild(el);
-  }});
-
-  const labels = document.getElementById('cidr-labels');
-  labels.innerHTML = `<span>$${{ip(vpc.vpc_start)}} - $${{ip(vpc.vpc_end)}}</span>`;
-}}
-
-function renderDetails(vpc) {{
-  const el = document.getElementById('subnet-details');
-  if (!el) return;
-  el.innerHTML = vpc.subnets.map(s => `
-    <div class="subnet-detail">
-      <h4>$${{s.name}} ($${{s.cidr}})</h4>
-      <p>AZ: $${{s.az}} | Type: $${{s.type}} | IPs: $${{s.total_ips}} total / $${{s.available}} available</p>
-      $${{s.tags.length > 0 ? '<p>$${{s.tags.map(t => '<span class="tag">' + t.key + ': ' + t.value + '</span>').join(' ')}}</p>' : ''}}
-    </div>
-  `).join('');
-}}
-
-function toggleExpand(id) {{
-  expandedSubnet = expandedSubnet === id ? null : id;
-  const vpc = findVpc(vpcId);
-  renderMap(vpc);
-}}
-
-function showTooltip(e, s) {{
-  const tip = document.getElementById('tooltip');
-  tip.innerHTML = `
-    <h3>$${{s.name}}</h3>
-    <p><strong>CIDR:</strong> $${{s.cidr}}</p>
-    <p><strong>Type:</strong> $${{s.type}}</p>
-    <p><strong>AZ:</strong> $${{s.az}}</p>
-    <p><strong>IPs:</strong> $${{s.total_ips}} total / $${{s.available}} available</p>
-    $${{s.tags.length > 0 ? '<p>$${{s.tags.map(t => '<span class="tag">' + t.key + ': ' + t.value + '</span>').join(' ')}}</p>' : ''}}
-  `;
-  tip.style.left = `${{e.clientX + 10}}px`;
-  tip.style.top = `${{e.clientY + 10}}px`;
-  tip.classList.add('visible');
-}}
-
-function hideTooltip() {{
-  document.getElementById('tooltip').classList.remove('visible');
+function toggleExpand(el) {{
+  if (expandedEl) expandedEl.classList.remove('expanded');
+  expandedEl = (expandedEl === el) ? null : el;
+  if (expandedEl) expandedEl.classList.add('expanded');
 }}
 
 function zoomIn() {{
   zoom = Math.min(zoom + 0.25, 3);
-  document.getElementById('zoom-level').textContent = `${{Math.round(zoom * 100)}}%`;
-  const vpc = findVpc(vpcId);
-  renderMap(vpc);
+  document.getElementById('zoom-level').textContent = Math.round(zoom * 100) + '%';
+  applyZoom();
 }}
 
 function zoomOut() {{
   zoom = Math.max(zoom - 0.25, 0.25);
-  document.getElementById('zoom-level').textContent = `${{Math.round(zoom * 100)}}%`;
-  const vpc = findVpc(vpcId);
-  renderMap(vpc);
+  document.getElementById('zoom-level').textContent = Math.round(zoom * 100) + '%';
+  applyZoom();
 }}
 
 function zoomReset() {{
   zoom = 1;
   document.getElementById('zoom-level').textContent = '100%';
-  const vpc = findVpc(vpcId);
-  renderMap(vpc);
+  applyZoom();
 }}
 
-function ip(n) {{
-  return (n >>> 24 & 255) + '.' + (n >>> 16 & 255) + '.' + (n >>> 8 & 255) + '.' + (n & 255);
+function applyZoom() {{
+  var bar = document.getElementById('vpc-bar');
+  bar.style.transform = 'scaleX(' + zoom + ')';
+  bar.style.transformOrigin = 'left center';
 }}
-
-// Init
-renderVpcSelector();
-const vpc = findVpc(vpcId);
-renderMap(vpc);
-renderDetails(vpc);
 </script>
 </body>
 </html>"""
+
+
+def _ip(n: float) -> str:
+    """Convert a numeric IP to dotted notation."""
+    return f"{int(n) >> 24 & 255}.{int(n) >> 16 & 255}.{int(n) >> 8 & 255}.{int(n) & 255}"
 
 
 def generate_visualization(

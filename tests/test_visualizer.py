@@ -99,7 +99,7 @@ def test_build_vpc_data_empty_cidrs():
     assert result["cidrs"] == ["10.0.0.0/16"]
 
 
-def test_render_html_contains_js():
+def test_render_html_contains_minimal_js():
     vpcs = [{
         "id": "vpc-123",
         "cidrs": ["10.0.0.0/16"],
@@ -119,9 +119,64 @@ def test_render_html_contains_js():
         }],
     }]
     html = _render_html(vpcs)
-    assert "<script>" in html
-    assert "const data" in html
+    # Only one <script> tag (no <script type="text/javascript"> or similar)
+    assert html.count("<script>") == 1
+    # Old JS used const data = {...}; that pattern is gone
+    assert "const data" not in html
+    # Old JS used document.createElement; that pattern is gone
+    assert "document.createElement" not in html
+    assert "zoom" in html
     assert "vpc-123" in html
+
+
+def test_render_html_has_static_subnet_bars():
+    vpcs = [{
+        "id": "vpc-123",
+        "cidrs": ["10.0.0.0/16"],
+        "vpc_start": 167772160,
+        "vpc_end": 167778695,
+        "subnets": [{
+            "id": "subnet-1",
+            "name": "Public",
+            "cidr": "10.0.1.0/24",
+            "az": "us-east-1a",
+            "type": "Public",
+            "x": 0.39,
+            "width": 3.91,
+            "total_ips": 256,
+            "available": 251,
+            "tags": [],
+        }],
+    }]
+    html = _render_html(vpcs)
+    assert '<div class="subnet-bar' in html
+    assert '<div class="cidr-labels' in html
+    assert 'style="left:' in html
+    assert ';width:' in html
+
+
+def test_render_html_has_details_panel():
+    vpcs = [{
+        "id": "vpc-123",
+        "cidrs": ["10.0.0.0/16"],
+        "vpc_start": 167772160,
+        "vpc_end": 167778695,
+        "subnets": [{
+            "id": "subnet-1",
+            "name": "PublicSubnet",
+            "cidr": "10.0.1.0/24",
+            "az": "us-east-1a",
+            "type": "Public",
+            "x": 0.39,
+            "width": 3.91,
+            "total_ips": 256,
+            "available": 251,
+            "tags": [],
+        }],
+    }]
+    html = _render_html(vpcs)
+    assert '<div class="subnet-detail"' in html
+    assert "<h4>" in html
 
 
 def test_render_html_contains_css():
