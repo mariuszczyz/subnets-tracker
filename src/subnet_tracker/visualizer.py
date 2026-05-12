@@ -200,6 +200,7 @@ def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
     position: absolute;
     top: 0;
     height: 100%;
+    min-width: 30px;
     border-radius: 0.375rem;
     cursor: pointer;
     transition: all 0.2s;
@@ -390,6 +391,7 @@ function renderMap(vpc) {{
 
 function renderDetails(vpc) {{
   const el = document.getElementById('subnet-details');
+  if (!el) return;
   el.innerHTML = vpc.subnets.map(s => `
     <div class="subnet-detail">
       <h4>$${{s.name}} ($${{s.cidr}})</h4>

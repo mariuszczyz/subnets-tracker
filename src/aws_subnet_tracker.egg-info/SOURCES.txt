@@ -10,3 +10,4 @@ src/subnet_tracker/__init__.py
 src/subnet_tracker/cli.py
 src/subnet_tracker/tracker.py
 tests/test_tracker.py
+tests/test_visualizer.py
