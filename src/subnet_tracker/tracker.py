@@ -143,10 +143,12 @@ class SubnetTracker:
         # Rule 3: Tags for Load Balancers
         missing_internal_tags = [sn['id'] for sn in private_subnets if not sn['eks_internal_elb']]
         if missing_internal_tags:
+            recommendations['status'] = 'Warning'
             recommendations['issues'].append(f"Private subnets missing 'kubernetes.io/role/internal-elb' tag: {', '.join(missing_internal_tags)}")
 
         missing_elb_tags = [sn['id'] for sn in public_subnets if not sn['eks_elb']]
         if missing_elb_tags:
+            recommendations['status'] = 'Warning'
             recommendations['issues'].append(f"Public subnets missing 'kubernetes.io/role/elb' tag: {', '.join(missing_elb_tags)}")
 
         # Proposals for new subnets

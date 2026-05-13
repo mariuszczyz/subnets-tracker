@@ -4,6 +4,33 @@ import boto3
 from subnet_tracker.tracker import SubnetTracker
 
 @mock_aws
+def test_eks_recommendations_warns_on_missing_elb_tags_only():
+    """ELB tag violations alone (no AZ or IP issues) must set status to Warning."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc = ec2.create_vpc(CidrBlock='10.0.0.0/16')['Vpc']
+    vpc_id = vpc['VpcId']
+
+    # Two private subnets in different AZs (satisfies Rule 1 - no AZ warning)
+    priv1 = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.0.1.0/24', AvailabilityZone='us-east-1a')['Subnet']
+    priv2 = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.0.2.0/24', AvailabilityZone='us-east-1b')['Subnet']
+    pub = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.0.3.0/24', AvailabilityZone='us-east-1a')['Subnet']
+
+    igw = ec2.create_internet_gateway()['InternetGateway']
+    ec2.attach_internet_gateway(InternetGatewayId=igw['InternetGatewayId'], VpcId=vpc_id)
+    pub_rt = ec2.create_route_table(VpcId=vpc_id)['RouteTable']
+    ec2.create_route(RouteTableId=pub_rt['RouteTableId'], DestinationCidrBlock='0.0.0.0/0', GatewayId=igw['InternetGatewayId'])
+    ec2.associate_route_table(SubnetId=pub['SubnetId'], RouteTableId=pub_rt['RouteTableId'])
+
+    # No EKS tags — only tag violation, nothing else
+    tracker = SubnetTracker(vpc_id, 'us-east-1')
+    tracker.fetch_data()
+    recs = tracker.get_eks_recommendations()
+
+    assert recs['status'] == 'Warning', f"Expected Warning, got {recs['status']}"
+    assert any('kubernetes.io/role/internal-elb' in i for i in recs['issues'])
+    assert any('kubernetes.io/role/elb' in i for i in recs['issues'])
+
+@mock_aws
 def test_subnet_tracker_logic():
     # Setup mock environment
     region = 'us-east-1'
