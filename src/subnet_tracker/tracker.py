@@ -10,6 +10,7 @@ class SubnetTracker:
         self.vpc_data = {}
         self.subnets = []
         self.route_tables = []
+        self._subnet_details_cache = None
 
     def fetch_data(self):
         """Fetches all necessary data from AWS."""
@@ -34,6 +35,7 @@ class SubnetTracker:
             for page in rt_paginator.paginate(Filters=[{'Name': 'vpc-id', 'Values': [self.vpc_id]}])
             for rt in page['RouteTables']
         ]
+        self._subnet_details_cache = None
 
     def is_public(self, subnet_id: str) -> bool:
         """
@@ -58,11 +60,13 @@ class SubnetTracker:
 
     def get_subnet_details(self) -> List[Dict[str, Any]]:
         """Processes and returns detailed information for each subnet."""
+        if self._subnet_details_cache is not None:
+            return self._subnet_details_cache
         details = []
         for sn in self.subnets:
             cidr = sn['CidrBlock']
             net = ipaddress.ip_network(cidr)
-            
+
             # AWS reserves 5 IPs in each subnet
             total_ips = net.num_addresses - 5
             available_ips = sn['AvailableIpAddressCount']
@@ -70,7 +74,7 @@ class SubnetTracker:
 
             # Get Name tag
             name = next((tag['Value'] for tag in sn.get('Tags', []) if tag['Key'] == 'Name'), 'N/A')
-            
+
             # EKS Tags
             eks_internal_elb = any(tag['Key'] == 'kubernetes.io/role/internal-elb' for tag in sn.get('Tags', []))
             eks_elb = any(tag['Key'] == 'kubernetes.io/role/elb' for tag in sn.get('Tags', []))
@@ -87,6 +91,7 @@ class SubnetTracker:
                 'eks_internal_elb': eks_internal_elb,
                 'eks_elb': eks_elb
             })
+        self._subnet_details_cache = details
         return details
 
     def get_unallocated_space(self) -> List[str]:

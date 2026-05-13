@@ -122,3 +122,17 @@ def test_fetch_data_returns_all_subnets():
     tracker.fetch_data()
 
     assert len(tracker.subnets) == 5
+
+@mock_aws
+def test_get_subnet_details_returns_cached_object():
+    """Repeated calls to get_subnet_details must return the same object, not recompute."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc = ec2.create_vpc(CidrBlock='10.0.0.0/16')['Vpc']
+    ec2.create_subnet(VpcId=vpc['VpcId'], CidrBlock='10.0.1.0/24', AvailabilityZone='us-east-1a')
+
+    tracker = SubnetTracker(vpc['VpcId'], 'us-east-1')
+    tracker.fetch_data()
+
+    first = tracker.get_subnet_details()
+    second = tracker.get_subnet_details()
+    assert first is second  # identical object — not recomputed
