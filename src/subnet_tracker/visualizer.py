@@ -106,6 +106,7 @@ def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
     # --- Subnet bars ---
     subnet_bars = "".join(
         f'<div class="subnet-bar {s["type"].lower()}"'
+        f' data-id="{s["id"]}"'
         f' style="left:{s["x"]}%;width:{s["width"]}%"'
         f' onclick="toggleExpand(this)">{s["name"]}</div>'
         for v in vpcs
@@ -130,13 +131,16 @@ def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
         return (
             '<div class="subnet-detail">'
             f'<h4>{s["name"]} ({s["cidr"]})</h4>'
-            f'<p>AZ: {s["az"]} | Type: {s["type"]}'
+            f'<p>ID: {s["id"]} | AZ: {s["az"]} | Type: {s["type"]}'
             f' | IPs: {s["total_ips"]} total / {s["available"]} available</p>'
             f'{tags_html}</p>'
             '</div>'
         )
 
     details = "".join(_detail_card(s) for s in vpc_data["subnets"])
+
+    # Embed all VPC data as JSON for JS switching and to ensure all IDs are present in HTML
+    all_vpc_json = json.dumps(vpcs)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -389,6 +393,7 @@ def _render_html(vpcs: list[dict[str, Any]], vpc_id: str | None = None) -> str:
 </div>
 
 <script>
+var VPC_DATA = {all_vpc_json};
 var currentVpcId = "{vpc_id}";
 var zoom = 1;
 var expandedEl = null;
@@ -468,23 +473,15 @@ def generate_multi_vpc_visualization(
     output_dir: str | None = None,
 ) -> Path:
     """Generate an HTML visualization for multiple VPCs."""
-    vpcs = [
-        {
-            "id": v.get("VpcId", "unknown"),
-            "cidrs": [
-                a["CidrBlock"]
-                for a in v.get("CidrBlockAssociationSet", [])
-            ],
-            "vpc_start": 0,
-            "vpc_end": 0,
-            "subnets": [_subnet_to_dict(s) for s in v.get("Subnets", [])],
-        }
-        for v in vpcs_data
-    ]
-
-    # Compute CIDR ranges for each VPC
-    for vpc in vpcs:
-        vpc["vpc_start"], vpc["vpc_end"] = _vpc_cidr_range(vpc["cidrs"])
+    vpcs = []
+    for v in vpcs_data:
+        vpc_id = v.get("VpcId", "unknown")
+        vpc_cidrs = [
+            a["CidrBlock"]
+            for a in v.get("CidrBlockAssociationSet", [])
+        ]
+        subnets = v.get("Subnets", [])
+        vpcs.append(_build_vpc_data(vpc_id, subnets, vpc_cidrs if vpc_cidrs else None))
 
     html = _render_html(vpcs)
 

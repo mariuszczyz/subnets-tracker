@@ -2,6 +2,8 @@ import pytest
 from moto import mock_aws
 import boto3
 from subnet_tracker.tracker import SubnetTracker
+from click.testing import CliRunner
+from subnet_tracker.cli import main
 
 @mock_aws
 def test_eks_recommendations_warns_on_missing_elb_tags_only():
@@ -136,3 +138,40 @@ def test_get_subnet_details_returns_cached_object():
     first = tracker.get_subnet_details()
     second = tracker.get_subnet_details()
     assert first is second  # identical object — not recomputed
+
+
+@mock_aws
+def test_cli_multi_vpc_does_not_require_vpc_id(tmp_path):
+    """--multi-vpc should work without --vpc-id."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc = ec2.create_vpc(CidrBlock='10.0.0.0/16')['Vpc']
+    ec2.create_subnet(VpcId=vpc['VpcId'], CidrBlock='10.0.1.0/24', AvailabilityZone='us-east-1a')
+
+    runner = CliRunner()
+    result = runner.invoke(main, ['--multi-vpc', '--region', 'us-east-1', '--no-open', '--output-dir', str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / 'vpc-visualizer-multi.html').exists()
+
+
+@mock_aws
+def test_cli_multi_vpc_html_contains_subnet(tmp_path):
+    """Multi-VPC visualization HTML must include actual subnet data."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc = ec2.create_vpc(CidrBlock='10.0.0.0/16')['Vpc']
+    sn = ec2.create_subnet(VpcId=vpc['VpcId'], CidrBlock='10.0.1.0/24', AvailabilityZone='us-east-1a')['Subnet']
+
+    runner = CliRunner()
+    result = runner.invoke(main, ['--multi-vpc', '--region', 'us-east-1', '--no-open', '--output-dir', str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+    html = (tmp_path / 'vpc-visualizer-multi.html').read_text()
+    assert sn['SubnetId'] in html
+
+
+@mock_aws
+def test_cli_errors_without_vpc_id_and_without_multi_vpc():
+    """Without --vpc-id and without --multi-vpc, CLI must print an error and exit non-zero."""
+    runner = CliRunner()
+    result = runner.invoke(main, ['--region', 'us-east-1'])
+    assert result.exit_code != 0
+    assert '--vpc-id' in result.output
