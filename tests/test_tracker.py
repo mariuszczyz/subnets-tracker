@@ -103,3 +103,22 @@ def test_subnet_tracker_logic():
     assert recommendations['status'] == 'Warning'
     assert any("at least 2 private subnets" in issue for issue in recommendations['issues'])
     assert any("missing 'kubernetes.io/role/internal-elb'" in issue for issue in recommendations['issues'])
+
+@mock_aws
+def test_fetch_data_returns_all_subnets():
+    """fetch_data must return all subnets across all pagination pages."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc = ec2.create_vpc(CidrBlock='10.0.0.0/16')['Vpc']
+    vpc_id = vpc['VpcId']
+
+    for i in range(5):
+        ec2.create_subnet(
+            VpcId=vpc_id,
+            CidrBlock=f'10.0.{i}.0/24',
+            AvailabilityZone='us-east-1a',
+        )
+
+    tracker = SubnetTracker(vpc_id, 'us-east-1')
+    tracker.fetch_data()
+
+    assert len(tracker.subnets) == 5

@@ -20,14 +20,20 @@ class SubnetTracker:
         self.vpc_data = vpcs[0]
 
         # Fetch Subnets
-        self.subnets = self.ec2.describe_subnets(
-            Filters=[{'Name': 'vpc-id', 'Values': [self.vpc_id]}]
-        )['Subnets']
+        subnet_paginator = self.ec2.get_paginator('describe_subnets')
+        self.subnets = [
+            sn
+            for page in subnet_paginator.paginate(Filters=[{'Name': 'vpc-id', 'Values': [self.vpc_id]}])
+            for sn in page['Subnets']
+        ]
 
         # Fetch Route Tables
-        self.route_tables = self.ec2.describe_route_tables(
-            Filters=[{'Name': 'vpc-id', 'Values': [self.vpc_id]}]
-        )['RouteTables']
+        rt_paginator = self.ec2.get_paginator('describe_route_tables')
+        self.route_tables = [
+            rt
+            for page in rt_paginator.paginate(Filters=[{'Name': 'vpc-id', 'Values': [self.vpc_id]}])
+            for rt in page['RouteTables']
+        ]
 
     def is_public(self, subnet_id: str) -> bool:
         """
