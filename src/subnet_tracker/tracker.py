@@ -58,9 +58,9 @@ class SubnetTracker:
             net = ipaddress.ip_network(cidr)
             
             # AWS reserves 5 IPs in each subnet
-            total_ips = net.num_addresses
+            total_ips = net.num_addresses - 5
             available_ips = sn['AvailableIpAddressCount']
-            used_ips = (total_ips - 5) - available_ips if total_ips > 5 else 0
+            used_ips = total_ips - available_ips
 
             # Get Name tag
             name = next((tag['Value'] for tag in sn.get('Tags', []) if tag['Key'] == 'Name'), 'N/A')
