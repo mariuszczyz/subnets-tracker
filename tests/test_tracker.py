@@ -182,7 +182,7 @@ def test_cli_errors_without_vpc_id_and_without_multi_vpc():
 def test_fetch_data_raises_on_missing_vpc():
     """fetch_data must raise an error when the VPC ID does not exist."""
     tracker = SubnetTracker('vpc-00000000000000000', 'us-east-1')
-    with pytest.raises(ClientError):
+    with pytest.raises(ValueError, match='vpc-00000000000000000'):
         tracker.fetch_data()
 
 

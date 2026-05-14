@@ -1,6 +1,7 @@
 import boto3
 import ipaddress
 from typing import List, Dict, Any
+from botocore.exceptions import ClientError
 
 class SubnetTracker:
     def __init__(self, vpc_id: str, region: str):
@@ -15,7 +16,12 @@ class SubnetTracker:
     def fetch_data(self):
         """Fetches all necessary data from AWS."""
         # Fetch VPC details
-        vpcs = self.ec2.describe_vpcs(VpcIds=[self.vpc_id])['Vpcs']
+        try:
+            vpcs = self.ec2.describe_vpcs(VpcIds=[self.vpc_id])['Vpcs']
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'InvalidVpcID.NotFound':
+                raise ValueError(f"VPC {self.vpc_id} not found.")
+            raise
         if not vpcs:
             raise ValueError(f"VPC {self.vpc_id} not found.")
         self.vpc_data = vpcs[0]
