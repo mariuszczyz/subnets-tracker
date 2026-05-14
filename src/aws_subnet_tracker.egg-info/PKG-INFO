@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: aws-subnet-tracker
-Version: 0.1.0
+Version: 0.0.0.2
 Summary: A read-only CLI tool to discover and analyze AWS VPC subnets.
 Requires-Python: >=3.9
 Requires-Dist: boto3

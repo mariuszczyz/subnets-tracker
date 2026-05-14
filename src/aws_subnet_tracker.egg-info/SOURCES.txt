@@ -9,5 +9,6 @@ src/aws_subnet_tracker.egg-info/top_level.txt
 src/subnet_tracker/__init__.py
 src/subnet_tracker/cli.py
 src/subnet_tracker/tracker.py
+src/subnet_tracker/visualizer.py
 tests/test_tracker.py
 tests/test_visualizer.py
