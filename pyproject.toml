@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aws-subnet-tracker"
-version = "0.1.0"
+version = "0.0.0.2"
 description = "A read-only CLI tool to discover and analyze AWS VPC subnets."
 requires-python = ">=3.9"
 dependencies = [
