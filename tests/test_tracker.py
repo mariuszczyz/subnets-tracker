@@ -1,6 +1,7 @@
 import pytest
 from moto import mock_aws
 import boto3
+from botocore.exceptions import ClientError
 from subnet_tracker.tracker import SubnetTracker
 from click.testing import CliRunner
 from subnet_tracker.cli import main
@@ -175,3 +176,38 @@ def test_cli_errors_without_vpc_id_and_without_multi_vpc():
     result = runner.invoke(main, ['--region', 'us-east-1'])
     assert result.exit_code != 0
     assert '--vpc-id' in result.output
+
+
+@mock_aws
+def test_fetch_data_raises_on_missing_vpc():
+    """fetch_data must raise an error when the VPC ID does not exist."""
+    tracker = SubnetTracker('vpc-00000000000000000', 'us-east-1')
+    with pytest.raises(ClientError):
+        tracker.fetch_data()
+
+
+@mock_aws
+def test_get_unallocated_space_returns_full_vpc_when_no_subnets():
+    """With no subnets, the entire VPC CIDR should be reported as unallocated."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc = ec2.create_vpc(CidrBlock='10.0.0.0/24')['Vpc']
+
+    tracker = SubnetTracker(vpc['VpcId'], 'us-east-1')
+    tracker.fetch_data()
+    unallocated = tracker.get_unallocated_space()
+
+    assert '10.0.0.0/24' in unallocated
+
+
+@mock_aws
+def test_get_unallocated_space_empty_when_fully_allocated():
+    """With a subnet that covers the entire VPC CIDR, unallocated space should be empty."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc = ec2.create_vpc(CidrBlock='10.0.1.0/24')['Vpc']
+    ec2.create_subnet(VpcId=vpc['VpcId'], CidrBlock='10.0.1.0/24', AvailabilityZone='us-east-1a')
+
+    tracker = SubnetTracker(vpc['VpcId'], 'us-east-1')
+    tracker.fetch_data()
+    unallocated = tracker.get_unallocated_space()
+
+    assert unallocated == []
