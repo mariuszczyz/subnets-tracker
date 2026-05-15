@@ -368,6 +368,7 @@ def _render_html(
     vpc_id: str | None = None,
     eks_data: dict[str, Any] | None = None,
     unallocated: list[str] | None = None,
+    vpc_extras: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     """Render the full HTML page."""
     active_id = vpc_id or (vpcs[0]["id"] if vpcs else "")
@@ -392,8 +393,16 @@ def _render_html(
         _render_vpc_section(
             v,
             is_active=(v["id"] == active_id),
-            eks_data=eks_data if v["id"] == active_id else None,
-            unallocated=unallocated if v["id"] == active_id else None,
+            eks_data=(
+                vpc_extras.get(v["id"], {}).get("eks_data")
+                if vpc_extras else
+                (eks_data if v["id"] == active_id else None)
+            ),
+            unallocated=(
+                vpc_extras.get(v["id"], {}).get("unallocated")
+                if vpc_extras else
+                (unallocated if v["id"] == active_id else None)
+            ),
         )
         for v in vpcs
     )
@@ -1068,6 +1077,7 @@ def generate_visualization(
 def generate_multi_vpc_visualization(
     vpcs_data: list[dict[str, Any]],
     output_dir: str | None = None,
+    vpc_extras: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     """Generate an HTML visualization for multiple VPCs."""
     vpcs = []
@@ -1077,7 +1087,7 @@ def generate_multi_vpc_visualization(
         subnets = v.get("Subnets", [])
         vpcs.append(_build_vpc_data(vid, subnets, vpc_cidrs if vpc_cidrs else None))
 
-    html = _render_html(vpcs)
+    html = _render_html(vpcs, vpc_extras=vpc_extras)
 
     out = Path(output_dir) if output_dir else Path.cwd()
     filepath = out / "vpc-visualizer-multi.html"

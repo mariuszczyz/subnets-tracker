@@ -238,6 +238,33 @@ def test_generate_multi_vpc_visualization(tmp_path):
 
 
 @mock_aws
+def test_generate_multi_vpc_visualization_with_extras(tmp_path):
+    ec2 = boto3.client("ec2", region_name="us-east-1")
+    vpc1 = ec2.create_vpc(CidrBlock="10.0.0.0/16")["Vpc"]
+    vpc2 = ec2.create_vpc(CidrBlock="172.16.0.0/16")["Vpc"]
+
+    vpc_extras = {
+        vpc1["VpcId"]: {
+            "eks_data": {"status": "Warning", "issues": ["Missing tag"], "proposals": []},
+            "unallocated": ["10.0.4.0/22"],
+        },
+        vpc2["VpcId"]: {
+            "eks_data": {"status": "OK", "issues": [], "proposals": []},
+            "unallocated": [],
+        },
+    }
+    filepath = generate_multi_vpc_visualization(
+        vpcs_data=[vpc1, vpc2],
+        output_dir=str(tmp_path),
+        vpc_extras=vpc_extras,
+    )
+    content = filepath.read_text()
+    assert "Missing tag" in content
+    assert "eks-section" in content
+    assert "10.0.4.0/22" in content
+
+
+@mock_aws
 def test_generate_visualization_opens_in_browser(tmp_path):
     ec2 = boto3.client("ec2", region_name="us-east-1")
     vpc = ec2.create_vpc(CidrBlock="10.0.0.0/16")["Vpc"]

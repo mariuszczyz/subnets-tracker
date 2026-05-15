@@ -28,7 +28,10 @@ def main(vpc_id, region, visual, multi_vpc, output_dir, no_open):
         return
 
     if not vpc_id:
-        _run_all_vpcs_report(region)
+        if visual:
+            _run_all_vpcs_visual(region, output_dir, no_open)
+        else:
+            _run_all_vpcs_report(region)
         return
 
     console.print(f"[bold blue]Analyzing VPC:[/bold blue] {vpc_id} in [bold green]{region}[/bold green]\n")
@@ -58,6 +61,44 @@ def main(vpc_id, region, visual, multi_vpc, output_dir, no_open):
         return
 
     _print_tables(tracker)
+
+
+def _run_all_vpcs_visual(region: str, output_dir: str | None, no_open: bool) -> None:
+    ec2 = boto3.client('ec2', region_name=region)
+    all_vpcs = ec2.describe_vpcs()['Vpcs']
+    if not all_vpcs:
+        console.print(f"[yellow]No VPCs found in region {region}.[/yellow]")
+        return
+
+    vpcs_with_subnets: list[dict] = []
+    vpc_extras: dict[str, dict] = {}
+
+    for vpc in all_vpcs:
+        vpc_id = vpc['VpcId']
+        try:
+            tracker = SubnetTracker(vpc_id, region)
+            tracker.fetch_data()
+            details_map = {d['id']: d for d in tracker.get_subnet_details()}
+            for sn in tracker.subnets:
+                sn['_type'] = details_map.get(sn['SubnetId'], {}).get('type', 'Private')
+            vpc['Subnets'] = tracker.subnets
+            vpc_extras[vpc_id] = {
+                'eks_data': tracker.get_eks_recommendations(),
+                'unallocated': tracker.get_unallocated_space(),
+            }
+        except Exception as e:
+            console.print(f"[bold red]Warning:[/bold red] Could not fetch {vpc_id}: {e}")
+            vpc['Subnets'] = []
+        vpcs_with_subnets.append(vpc)
+
+    filepath = generate_multi_vpc_visualization(
+        vpcs_data=vpcs_with_subnets,
+        output_dir=output_dir,
+        vpc_extras=vpc_extras,
+    )
+    console.print(f"[bold green]Visualization saved to:[/bold green] {filepath}")
+    if not no_open:
+        open_visualization(filepath)
 
 
 def _run_multi_vpc(region: str, output_dir: str | None, no_open: bool) -> None:

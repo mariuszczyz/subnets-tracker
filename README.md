@@ -1,72 +1,94 @@
 # AWS Subnet Tracker
 
-A read-only command-line tool to discover and analyze AWS VPC subnets. It calculates IP usage, identifies unallocated VPC space, and provides EKS networking best practice recommendations.
+A read-only command-line tool to discover and analyze AWS VPC subnets. It calculates IP usage, identifies unallocated VPC space, and provides EKS networking best practice recommendations — with an optional interactive HTML visualization.
 
 ## Features
 
-- **Subnet Inventory**: Shows ID, Name, AZ, Type (Public/Private), CIDR, Total/Used/Available IPs, and EKS Tags.
-- **Unallocated Space**: Lists available CIDR blocks in the VPC that can be used for new subnets.
-- **EKS Recommendations**: Analyzes subnets against EKS best practices (AZ diversity, IP availability, and required ELB tags).
-- **Interactive Visualizer**: CIDR map visualization with hover tooltips, click-to-expand, zoom controls, and multi-VPC support.
-- **Read-Only**: Performs only `Describe` operations; no changes are made to your AWS account.
+- **Subnet Inventory**: Shows ID, Name, AZ, Type (Public/Private), CIDR, Total/Used/Available IPs, and EKS tags.
+- **Unallocated Space**: Lists free CIDR blocks inside the VPC that can be used for new subnets.
+- **EKS Recommendations**: Validates subnets against EKS best practices (AZ diversity, IP availability, required ELB tags).
+- **Interactive HTML Visualizer**: AZ swim-lane CIDR map, IP utilization overlay, hover tooltips, VPC→AZ→Subnet dependency diagram, sortable details table, EKS readiness section, per-VPC zoom controls.
+- **All-VPCs Report**: Analyze or visualize every VPC in a region in a single command.
+- **Read-Only**: Only calls `Describe` APIs — no changes are made to your AWS account.
 
 ## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-repo/subnets-tracker.git
-   cd subnets-tracker
-   ```
-
-2. Install the package:
-   ```bash
-   pip install -e .
-   ```
+```bash
+git clone https://github.com/your-repo/subnets-tracker.git
+cd subnets-tracker
+uv sync
+```
 
 ## Usage
 
-Ensure you have your AWS credentials configured (e.g., via `aws configure` or environment variables).
+Ensure AWS credentials are configured (e.g. `aws configure`, environment variables, or an IAM role).
 
-### Table Output
-
-Run the tool by providing a VPC ID:
+### Analyze a single VPC (table output)
 
 ```bash
 subnet-tracker --vpc-id vpc-0123456789abcdef0 --region us-east-1
 ```
 
-### Visual Output
+### Analyze a single VPC (HTML visualization)
 
-Generate an interactive HTML visualization and open it in your browser:
+Opens an interactive HTML report in your default browser:
 
 ```bash
 subnet-tracker --vpc-id vpc-0123456789abcdef0 --region us-east-1 --visual
 ```
 
-Visualize all VPCs in the region:
+### Analyze all VPCs in a region (table output)
+
+Omit `--vpc-id` to loop over every VPC and print a table for each:
 
 ```bash
-subnet-tracker --vpc-id vpc-0123456789abcdef0 --region us-east-1 --multi-vpc
+subnet-tracker --region us-east-1
 ```
 
-### Options
+### Analyze all VPCs in a region (HTML visualization)
 
-- `--vpc-id`: (Required) The ID of the VPC to analyze.
-- `--region`: (Optional) The AWS region. Defaults to `us-east-1`.
-- `--visual`: (Optional) Generate an interactive HTML visualization.
-- `--multi-vpc`: (Optional) Visualize all VPCs in the region.
-- `--output-dir`: (Optional) Directory to write the visualization file.
+Omit `--vpc-id` and add `--visual` to generate a single HTML file covering every VPC, with full subnet-type detection, EKS readiness, and unallocated-space sections per VPC:
+
+```bash
+subnet-tracker --region us-east-1 --visual
+```
+
+### Save the HTML file without opening a browser
+
+```bash
+subnet-tracker --region us-east-1 --visual --no-open --output-dir ./reports
+```
+
+### All options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--vpc-id` | _(none)_ | VPC to analyze. Omit to process all VPCs in the region. |
+| `--region` | `us-east-1` | AWS region. |
+| `--visual` | off | Generate an interactive HTML visualization. |
+| `--multi-vpc` | off | Quick raw HTML dump of all VPCs (no EKS/unallocated enrichment). |
+| `--output-dir` | current dir | Directory to write the HTML file. |
+| `--no-open` | off | Write the HTML file without opening it in a browser. |
+
+## HTML Report
+
+The interactive HTML report includes:
+
+- **Stats cards** — subnet count, AZ count, total usable IPs, and VPC CIDR at a glance.
+- **CIDR Map** — one swim lane per Availability Zone; subnet bars colored by type (green = Public, blue = Private) with a darker overlay showing used IPs. Gray bars for unallocated CIDR space. Click a bar to highlight the matching row in the details table.
+- **Dependency Diagram** — VPC → AZ → Subnet tree with type badges and EKS tag labels.
+- **Subnet Details** — sortable table with Name, ID, AZ, Type, CIDR, Total/Used/Available IPs, utilization bar, and EKS tags.
+- **EKS Readiness** — per-VPC status badge (OK / Warning) with issues and proposals.
+- **VPC Switcher** — click between VPCs when the report covers multiple VPCs.
+- **Zoom controls** — zoom the CIDR map in/out per VPC.
 
 ## Development & Testing
 
-Install development dependencies:
 ```bash
-pip install pytest moto
-```
-
-Run tests:
-```bash
-pytest
+uv sync --dev             # installs pytest, moto, etc.
+uv run pytest             # run all tests
+uv run pytest -v          # verbose
+uv run pytest --cov=subnet_tracker  # with coverage (requires pytest-cov)
 ```
 
 ## License
