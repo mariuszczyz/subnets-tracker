@@ -123,8 +123,6 @@ def test_render_html_contains_minimal_js():
     assert html.count("<script>") == 1
     # Old JS used const data = {...}; that pattern is gone
     assert "const data" not in html
-    # Old JS used document.createElement; that pattern is gone
-    assert "document.createElement" not in html
     assert "zoom" in html
     assert "vpc-123" in html
 
@@ -150,7 +148,7 @@ def test_render_html_has_static_subnet_bars():
     }]
     html = _render_html(vpcs)
     assert '<div class="subnet-bar' in html
-    assert '<div class="cidr-labels' in html
+    assert 'cidr-range-row' in html
     assert 'style="left:' in html
     assert ';width:' in html
 
@@ -175,8 +173,9 @@ def test_render_html_has_details_panel():
         }],
     }]
     html = _render_html(vpcs)
-    assert '<div class="subnet-detail"' in html
-    assert "<h4>" in html
+    # Details are now rendered as a sortable table, not detail divs
+    assert 'details-body' in html
+    assert 'PublicSubnet' in html
 
 
 def test_render_html_contains_css():

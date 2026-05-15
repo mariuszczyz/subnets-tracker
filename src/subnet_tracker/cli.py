@@ -41,11 +41,16 @@ def main(vpc_id, region, visual, multi_vpc, output_dir, no_open):
         sys.exit(1)
 
     if visual:
+        details_map = {d['id']: d for d in tracker.get_subnet_details()}
+        for sn in tracker.subnets:
+            sn['_type'] = details_map.get(sn['SubnetId'], {}).get('type', 'Private')
         filepath = generate_visualization(
             vpc_data=tracker.vpc_data,
             subnets=tracker.subnets,
             vpc_id=vpc_id,
             output_dir=output_dir,
+            eks_data=tracker.get_eks_recommendations(),
+            unallocated=tracker.get_unallocated_space(),
         )
         console.print(f"[bold green]Visualization saved to:[/bold green] {filepath}")
         if not no_open:
