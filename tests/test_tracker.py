@@ -170,12 +170,32 @@ def test_cli_multi_vpc_html_contains_subnet(tmp_path):
 
 
 @mock_aws
-def test_cli_errors_without_vpc_id_and_without_multi_vpc():
-    """Without --vpc-id and without --multi-vpc, CLI must print an error and exit non-zero."""
+def test_cli_all_vpcs_report_no_vpc_id():
+    """No --vpc-id should print tables for all VPCs and exit zero."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc = ec2.create_vpc(CidrBlock='10.0.0.0/16')['Vpc']
+    ec2.create_subnet(VpcId=vpc['VpcId'], CidrBlock='10.0.1.0/24', AvailabilityZone='us-east-1a')
+
     runner = CliRunner()
     result = runner.invoke(main, ['--region', 'us-east-1'])
-    assert result.exit_code != 0
-    assert '--vpc-id' in result.output
+    assert result.exit_code == 0, result.output
+    assert vpc['VpcId'] in result.output
+
+
+@mock_aws
+def test_cli_all_vpcs_report_shows_all_vpcs():
+    """No --vpc-id must print a section for every VPC in the region."""
+    ec2 = boto3.client('ec2', region_name='us-east-1')
+    vpc1 = ec2.create_vpc(CidrBlock='10.0.0.0/16')['Vpc']
+    vpc2 = ec2.create_vpc(CidrBlock='10.1.0.0/16')['Vpc']
+    ec2.create_subnet(VpcId=vpc1['VpcId'], CidrBlock='10.0.1.0/24', AvailabilityZone='us-east-1a')
+    ec2.create_subnet(VpcId=vpc2['VpcId'], CidrBlock='10.1.1.0/24', AvailabilityZone='us-east-1b')
+
+    runner = CliRunner()
+    result = runner.invoke(main, ['--region', 'us-east-1'])
+    assert result.exit_code == 0, result.output
+    assert vpc1['VpcId'] in result.output
+    assert vpc2['VpcId'] in result.output
 
 
 @mock_aws
