@@ -28,8 +28,8 @@ def main(vpc_id, region, visual, multi_vpc, output_dir, no_open):
         return
 
     if not vpc_id:
-        console.print("[bold red]Error:[/bold red] --vpc-id is required unless --multi-vpc is specified.")
-        sys.exit(1)
+        _run_all_vpcs_report(region)
+        return
 
     console.print(f"[bold blue]Analyzing VPC:[/bold blue] {vpc_id} in [bold green]{region}[/bold green]\n")
 
@@ -71,6 +71,24 @@ def _run_multi_vpc(region: str, output_dir: str | None, no_open: bool) -> None:
     console.print(f"[bold green]Multi-VPC visualization saved to:[/bold green] {filepath}")
     if not no_open:
         open_visualization(filepath)
+
+
+def _run_all_vpcs_report(region: str) -> None:
+    ec2 = boto3.client('ec2', region_name=region)
+    vpcs = ec2.describe_vpcs()['Vpcs']
+    if not vpcs:
+        console.print(f"[yellow]No VPCs found in region {region}.[/yellow]")
+        return
+    for vpc in vpcs:
+        vpc_id = vpc['VpcId']
+        cidr = vpc.get('CidrBlock', 'N/A')
+        console.rule(f"VPC: {vpc_id}  ({cidr})")
+        try:
+            tracker = SubnetTracker(vpc_id, region)
+            tracker.fetch_data()
+            _print_tables(tracker)
+        except Exception as e:
+            console.print(f"[bold red]Error fetching VPC {vpc_id}:[/bold red] {e}")
 
 
 def _print_tables(tracker: SubnetTracker) -> None:
